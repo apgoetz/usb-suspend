@@ -1,0 +1,40 @@
+[package]
+authors = ["agoetz"]
+edition = "2018"
+readme = "README.md"
+name = "usb_suspend"
+version = "0.1.0"
+
+[dependencies]
+cortex-m-rt = "0.6.10"
+panic-halt = "0.2.0"
+usb-device = "0.2.5"
+usbd-serial = "0.1.0"
+stm32l0 = "0.10.0"
+cortex-m = "0.6.1"
+
+[patch.crates-io]
+stm32-usbd = { git = 'https://github.com/apgoetz/stm32-usbd'}
+
+[dependencies.stm32l0xx-hal]
+version = "0.6.1"
+features = ["stm32l0x3", "rt", "stm32-usbd", "mcu-STM32L053C8Tx"]
+
+# this lets you use `cargo fix`!
+[[bin]]
+name = "irq"
+path = "src/irq.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "loop"
+path = "src/loop.rs"
+test = false
+bench = false
+
+
+[profile.release]
+codegen-units = 1 # better optimizations
+debug = true # symbols are nice and they don't increase the size on Flash
+lto = true # better optimizations
