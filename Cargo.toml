@@ -13,8 +13,10 @@ usbd-serial = "0.1.0"
 stm32l0 = "0.10.0"
 cortex-m = "0.6.1"
 
-[patch.crates-io]
-stm32-usbd = { git = 'https://github.com/apgoetz/stm32-usbd'}
+# uncomment these lines to use the proposed patch for suspend mode
+
+# [patch.crates-io]
+# stm32-usbd = { git = 'https://github.com/apgoetz/stm32-usbd'}
 
 [dependencies.stm32l0xx-hal]
 version = "0.6.1"
