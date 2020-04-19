@@ -7,6 +7,7 @@ use core::cell::RefCell;
 use core::ops::DerefMut;
 use cortex_m::interrupt::Mutex;
 
+use usb_device::device::UsbDeviceState;
 use core::fmt::Write;
 use cortex_m_rt::entry;
 use stm32l0::stm32l0x3;
@@ -56,7 +57,7 @@ fn main() -> ! {
         .usart(txpin, rxpin, serial::Config::default().baudrate(115_200_u32.bps()), &mut rcc)
         .unwrap();
     let (mut uart, _) = uart.split();
-    writeln!(uart, "finished init\r").unwrap();
+    writeln!(uart, "reset\r").unwrap();
     cortex_m::interrupt::free(|cs| {
         *RESOURCES.borrow(cs).borrow_mut() = Some(Resources {
             uart,
@@ -73,31 +74,36 @@ fn main() -> ! {
 
 #[interrupt]
 fn USB() {
-    static mut OLDSTATE: Option<device::UsbDeviceState> = None;
 
     cortex_m::interrupt::free(|cs| {
         if let Some(ref mut r) = RESOURCES.borrow(cs).borrow_mut().deref_mut() {
+            let (istr,fnr) = unsafe {
+                let regs = pac::Peripherals::steal().USB;
+                (regs.istr.read().bits(),
+                 regs.fnr.read().bits())
+            };
+
+            // poll the device state
             let pr = r.usb_dev.poll(&mut [&mut r.serial]);
 
+            // check status of cntr and istr again
+            let (cntr,post_istr) = unsafe {
+                let regs = pac::Peripherals::steal().USB;
+                (regs.cntr.read().bits(),
+                 regs.istr.read().bits())
+            };
+            
             let state = r.usb_dev.state();
-            if Some(state) != *OLDSTATE || false {
-                *OLDSTATE = Some(state);
-                writeln!(
-                    r.uart,
-                    "{}\r",
-                    match state {
-                        usb_device::device::UsbDeviceState::Default => "def",
-                        usb_device::device::UsbDeviceState::Addressed => "addr",
-                        usb_device::device::UsbDeviceState::Configured => "conf",
-                        usb_device::device::UsbDeviceState::Suspend => "susp",
-                    }
-                )
-                .ok();
+            writeln!(
+                r.uart,
+                "i:{:04x} f:{:04x} s:{} c:{:04x} i:{:04x}\r",
+                istr,fnr,print_state(&state),cntr,post_istr).ok();
+            
+            // Note: stm32_usb handles FSUSP and LPMOODE if a
+            // suspend/resume event occurs during the poll() call above
 
-                // Note: stm32_usb handles FSUSP and LPMOODE if a
-                // suspend/resume event occurs during the poll() call above
-            }
 
+            // do the normal serial port echoing stuff
             if !pr {
                 return;
             }
@@ -127,4 +133,12 @@ fn USB() {
             }
         }
     });
+}
+fn print_state (state : &UsbDeviceState) -> &str {
+    match state {
+        UsbDeviceState::Default =>    "def ",
+        UsbDeviceState::Addressed =>  "addr",
+        UsbDeviceState::Configured => "conf",
+        UsbDeviceState::Suspend =>    "susp",
+    }
 }

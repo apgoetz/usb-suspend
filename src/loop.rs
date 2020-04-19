@@ -8,12 +8,12 @@ extern crate panic_halt;
 use stm32l0xx_hal::usb::{UsbBus, USB};
 use stm32l0xx_hal::{pac, prelude::*, rcc, serial, syscfg::SYSCFG};
 use stm32l0xx_hal::serial::Serial1Ext;
-
+use cortex_m;
 use cortex_m_rt::entry;
 use usb_device::prelude::*;
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 use core::fmt::Write;
-
+use usb_device::device::UsbDeviceState;
 
 #[entry]
 fn main() -> ! {
@@ -45,57 +45,36 @@ fn main() -> ! {
         .usart(txpin, rxpin, serial::Config::default().baudrate(115_200_u32.bps()), &mut rcc)
         .unwrap();
     let (mut uart, _) = uart.split();
-    writeln!(uart, "finished init\r").unwrap();
+    writeln!(uart, "reset\r").unwrap();
 
-    let mut oldstate = usb_dev.state();
     loop {
-        let pr = usb_dev.poll(&mut [&mut serial]);
 
+        let (istr,fnr) = cortex_m::interrupt::free(|_| { unsafe {
+            (pac::Peripherals::steal().USB.istr.read().bits(),
+             pac::Peripherals::steal().USB.fnr.read().bits())
+        }});
+        let oldstate = usb_dev.state();
+        usb_dev.poll(&mut [&mut serial]);
         let state = usb_dev.state();
         if state != oldstate {
-            oldstate = state;
             writeln!(
                 uart,
-                "{}\r",
-                match state {
-                    usb_device::device::UsbDeviceState::Default => "def",
-                    usb_device::device::UsbDeviceState::Addressed => "addr",
-                    usb_device::device::UsbDeviceState::Configured => "conf",
-                    usb_device::device::UsbDeviceState::Suspend => "susp",
-                }
-            )
-            .ok();
+                "i:{:04x} f:{:04x} s:{}->{}\r",
+                istr,
+                fnr,
+                print_state(&oldstate),
+                print_state(&state)).ok();
 
             // Note: stm32_usb handles FSUSP and LPMOODE if a
             // suspend/resume event occurs during the poll() call above
         }
-
-        if !pr {
-            continue;
-        }
-
-        let mut buf = [0u8; 64];
-
-        match serial.read(&mut buf) {
-            Ok(count) if count > 0 => {
-                // Echo back in upper case
-                for c in buf[0..count].iter_mut() {
-                    if 0x61 <= *c && *c <= 0x7a {
-                        *c &= !0x20;
-                    }
-                }
-
-                let mut write_offset = 0;
-                while write_offset < count {
-                    match serial.write(&buf[write_offset..count]) {
-                        Ok(len) if len > 0 => {
-                            write_offset += len;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            _ => {}
-        }
+    }
+}
+fn print_state (state : &UsbDeviceState) -> &str {
+    match state {
+        UsbDeviceState::Default => "def",
+        UsbDeviceState::Addressed => "addr",
+        UsbDeviceState::Configured => "conf",
+        UsbDeviceState::Suspend => "susp",
     }
 }
