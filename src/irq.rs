@@ -2,6 +2,13 @@
 #![no_std]
 #![no_main]
 
+use stm32l0::stm32l0x3;
+use stm32l0xx_hal::pac::{interrupt, Interrupt};
+use stm32l0xx_hal::serial::Serial1Ext;
+use stm32l0xx_hal::usb::{UsbBus, UsbBusType, USB};
+use stm32l0xx_hal::{pac, prelude::*, rcc, serial, syscfg::SYSCFG};
+
+
 extern crate panic_halt;
 use core::cell::RefCell;
 use core::ops::DerefMut;
@@ -10,14 +17,10 @@ use cortex_m::interrupt::Mutex;
 use usb_device::device::UsbDeviceState;
 use core::fmt::Write;
 use cortex_m_rt::entry;
-use stm32l0::stm32l0x3;
+
 use cortex_m::asm;
 use cortex_m::peripheral::NVIC;
-use stm32l0xx_hal::pac::{interrupt, Interrupt};
-use stm32l0xx_hal::serial::Serial1Ext;
-use stm32l0xx_hal::usb::{UsbBus, UsbBusType, USB};
-use stm32l0xx_hal::{pac, prelude::*, rcc, serial, syscfg::SYSCFG};
-use usb_device::{bus, device, prelude::*};
+use usb_device::{bus, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 struct Resources {
